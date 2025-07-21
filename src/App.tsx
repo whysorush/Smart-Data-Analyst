@@ -43,19 +43,30 @@ function App() {
 
   return (
     <div>
-      <div style={{ marginBottom: '1rem' }}>
-        <label htmlFor="deepseek-api-key">DeepSeek API Key: </label>
+      
+      
+      <CurrencyProvider>
+        
+        <Layout currentView={currentView} onViewChange={setCurrentView}>
+        <div className="mb-6 flex flex-col max-w-md">
+        <label
+          htmlFor="deepseek-api-key"
+          className="mb-2 text-sm font-medium text-gray-700"
+        >
+          DeepSeek API Key
+        </label>
         <input
           id="deepseek-api-key"
           type="text"
           value={apiKey}
           onChange={e => setApiKey(e.target.value)}
           placeholder="Enter your DeepSeek API Key"
-          style={{ width: '300px' }}
+          className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
         />
+        <span className="mt-1 text-xs text-gray-500">
+          Your API key is kept private and never shared.
+        </span>
       </div>
-      <CurrencyProvider>
-        <Layout currentView={currentView} onViewChange={setCurrentView}>
           {renderCurrentView()}
         </Layout>
       </CurrencyProvider>
