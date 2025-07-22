@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, Download } from 'lucide-react';
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 import type { Dataset, DataPoint } from '../types';
 
 interface DataImportProps {
@@ -29,6 +30,13 @@ export const DataImport: React.FC<DataImportProps> = ({ onDataImported }) => {
     setFileName(file.name);
     setErrorMessage('');
 
+    const excelTypes = [
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      '.xls',
+      '.xlsx'
+    ];
+
     if (file.type === 'application/json') {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -54,6 +62,41 @@ export const DataImport: React.FC<DataImportProps> = ({ onDataImported }) => {
         }
       };
       reader.readAsText(file);
+    } else if (
+      excelTypes.includes(file.type) ||
+      file.name.endsWith('.xls') ||
+      file.name.endsWith('.xlsx')
+    ) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const json = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+          let columns: string[] = [];
+          if (json.length > 0 && typeof json[0] === 'object' && json[0] !== null && !Array.isArray(json[0])) {
+            columns = Object.keys(json[0] as object);
+          }
+
+          const dataset: Dataset = {
+            id: Date.now().toString(),
+            name: file.name.replace(/\.[^/.]+$/, ''),
+            data: json as DataPoint[],
+            columns,
+            uploadDate: new Date()
+          };
+
+          setPreviewData((json as DataPoint[]).slice(0, 5));
+          setUploadStatus('success');
+          onDataImported(dataset);
+        } catch (error) {
+          setErrorMessage('Invalid Excel file format');
+          setUploadStatus('error');
+        }
+      };
+      reader.readAsArrayBuffer(file);
     } else {
       Papa.parse(file, {
         header: true,
@@ -78,6 +121,7 @@ export const DataImport: React.FC<DataImportProps> = ({ onDataImported }) => {
 
           setPreviewData(data.slice(0, 5));
           setUploadStatus('success');
+          console.log(dataset);
           onDataImported(dataset);
         },
         error: (error) => {
@@ -193,7 +237,7 @@ export const DataImport: React.FC<DataImportProps> = ({ onDataImported }) => {
                     <input
                       type="file"
                       className="hidden"
-                      accept=".csv,.json"
+                      accept=".csv,.json,.xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                       onChange={handleFileInput}
                     />
                   </label>
