@@ -138,12 +138,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ datasets }) => {
         Dataset: ${selectedDataset.name}
         Total Records: ${selectedDataset.data.length}
         Columns: ${selectedDataset.columns.join(', ')}
-        \n        All monetary values are in INR (Indian Rupees).\n
+
+        All monetary values are in INR (Indian Rupees).
+
         Statistical Summary:
         ${dataStats.map(stat => 
           `${stat.column}: Avg=${stat.average.toFixed(2)}, Total=${stat.total.toFixed(2)}, Max=${stat.max}, Min=${stat.min}, Count=${stat.count}`
         ).join('\n')}
-        \n        Please provide:
+
+        Instructions:
+        - For large datasets, focus on summarizing key trends, correlations, and anomalies.
+        - Identify and explain outliers, sudden changes, or unusual patterns.
+        - Prioritize actionable business insights and strategic recommendations.
+        - Highlight performance indicators and their implications.
+        - Use concise bullet points for clarity.
+        - Suggest further analysis, visualizations, or data segments if relevant.
+        - If possible, relate findings to business goals or industry benchmarks.
+
+        Please provide:
         1. Key business insights and trends
         2. Notable patterns or anomalies
         3. Strategic recommendations
@@ -176,18 +188,42 @@ export const Dashboard: React.FC<DashboardProps> = ({ datasets }) => {
     try {
       // Enhanced context for chat queries
       const relevantData = selectedDataset.data.slice(0, 10);
+
+      // Calculate basic stats for numeric columns
+      const numericColumns = selectedDataset.columns.filter(col => {
+        const sampleValue = selectedDataset.data[0]?.[col];
+        return !isNaN(Number(sampleValue)) && sampleValue !== '';
+      });
+      const dataStats = numericColumns.map(col => {
+        const values = selectedDataset.data.map(row => Number(row[col])).filter(val => !isNaN(val));
+        const sum = values.reduce((a, b) => a + b, 0);
+        const avg = sum / values.length;
+        const max = Math.max(...values);
+        const min = Math.min(...values);
+        return `${col}: Avg=${avg.toFixed(2)}, Total=${sum.toFixed(2)}, Max=${max}, Min=${min}, Count=${values.length}`;
+      }).join('\n');
+
       const context = `
         User Question: "${chatInput}"
-        \n        Dataset Context:
+
+        Dataset Context:
         - Name: ${selectedDataset.name}
         - Total Records: ${selectedDataset.data.length}
         - Columns: ${selectedDataset.columns.join(', ')}
-        \n        All monetary values are in INR (Indian Rupees).\n
+
+        All monetary values are in INR (Indian Rupees).
+
         Sample Data (first 10 records):
         ${JSON.stringify(relevantData, null, 2)}
-        \n        Current KPIs:
+
+        Statistical Summary:
+        ${dataStats}
+
+        Current KPIs:
         ${kpis.map(kpi => `${kpi.name}: ${kpi.value} (${kpi.trend} ${kpi.changePercent}%)`).join('\n')}
-        \n        Please provide a specific, data-driven answer to the user's question based on this dataset.
+
+        Please provide a specific, data-driven answer to the user's question based on this dataset.
+        For large datasets, focus on summarizing key trends, patterns, and anomalies. Highlight actionable insights, outliers, and business implications. Use concise bullet points and suggest further analysis or visualizations if relevant.
       `;
       
       const aiResponse = await deepseekApi.generateInsights(selectedDataset.data, context);

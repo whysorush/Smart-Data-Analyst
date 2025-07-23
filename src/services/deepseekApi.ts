@@ -35,11 +35,19 @@ class DeepSeekAPI {
       const messages: DeepSeekMessage[] = [
         {
           role: 'system',
-          content: 'You are an expert business analyst. Analyze the provided data and generate actionable insights, trends, and recommendations. Focus on key patterns, anomalies, and business implications. Provide specific, data-driven insights.Price will be in INR'
+          content: `You are an expert business analyst. When analyzing large datasets, focus on summarizing key trends, patterns, and anomalies. Prioritize actionable insights, outliers, and business implications. Use concise bullet points and highlight the most significant findings. If relevant, suggest further analysis or visualizations. Price will be in INR.`
         },
         {
           role: 'user',
-          content: `Analyze this business data and provide insights: ${context}\n\nData sample: ${JSON.stringify(data.slice(0, 10), null, 2)}\n\nTotal records: ${data.length}`
+          content: `Analyze this business data and provide insights:
+Context: ${context}
+
+Data sample (first 10 records):
+${JSON.stringify(data.slice(0, 10), null, 2)}
+
+Total records: ${data.length}
+
+If the dataset is large, summarize the main trends and highlight any notable outliers or patterns. Focus on what matters most for business decisions.`
         }
       ];
 
@@ -74,11 +82,14 @@ class DeepSeekAPI {
       const messages: DeepSeekMessage[] = [
         {
           role: 'system',
-          content: 'You are a business intelligence expert. Analyze KPIs and provide strategic recommendations for improvement. Price will be in INR'
+          content: `You are a business intelligence expert. For large sets of KPIs, identify the most critical metrics and provide strategic, prioritized recommendations for improvement. Highlight KPIs that deviate from benchmarks or targets. Use clear, actionable suggestions. Price will be in INR.`
         },
         {
           role: 'user',
-          content: `Analyze these KPIs and provide recommendations: ${JSON.stringify(kpis, null, 2)}`
+          content: `Analyze these KPIs and provide recommendations:
+${JSON.stringify(kpis, null, 2)}
+
+If there are many KPIs, focus on the most important ones and summarize your recommendations for overall business impact.`
         }
       ];
 
@@ -92,7 +103,7 @@ class DeepSeekAPI {
           model: this.model,
           messages,
           temperature: 0.7,
-          max_tokens: 800
+          max_tokens: 5000
         })
       });
 
@@ -113,7 +124,7 @@ class DeepSeekAPI {
       const messages: DeepSeekMessage[] = [
         {
           role: 'system',
-          content: 'You are a data visualization expert. Analyze the provided data structure and recommend the most suitable chart type. Respond with only one word: "line", "bar", "pie", "area", or "scatter".Price will be in INR'
+          content: `You are a data visualization expert. For large or complex datasets, recommend the most effective chart type for summarizing and visualizing the main relationships. Respond with only one word: "line", "bar", "pie", "area", or "scatter". Price will be in INR.`
         },
         {
           role: 'user',
@@ -121,7 +132,7 @@ class DeepSeekAPI {
 
 Columns: ${columns.join(', ')}
 
-Sample data:
+Sample data (first 5 records):
 ${JSON.stringify(dataSample.slice(0, 5), null, 2)}
 
 Total columns: ${columns.length}
@@ -130,7 +141,7 @@ Data types: ${columns.map(col => {
             return `${col}: ${typeof sampleValue === 'number' ? 'numeric' : 'text'}`;
           }).join(', ')}
 
-Recommend the most suitable chart type for this data structure.`
+For large datasets, recommend a chart type that best summarizes the key relationships or trends. Respond with only one word.`
         }
       ];
 
