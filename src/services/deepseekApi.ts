@@ -174,6 +174,45 @@ For large datasets, recommend a chart type that best summarizes the key relation
       return 'bar'; // Default fallback
     }
   }
+
+  async generateGoalInsight(goal: any, dataset: any): Promise<string> {
+    try {
+      const messages: DeepSeekMessage[] = [
+        {
+          role: 'system',
+          content: `You are an expert business analyst. Given a business goal and a dataset, provide a concise (1-3 sentence) insight about the likelihood of achieving the goal, potential challenges, and a key actionable suggestion. Be specific and actionable. Price will be in INR.`
+        },
+        {
+          role: 'user',
+          content: `Goal: ${goal.title}\nDescription: ${goal.description}\nTarget: ${goal.target}\nDeadline: ${goal.deadline}\n\nAnalyze the following data (first 10 records):\n${JSON.stringify(dataset.data.slice(0, 10), null, 2)}\n\nColumns: ${dataset.columns.join(', ')}\nTotal records: ${dataset.data.length}`
+        }
+      ];
+
+      const response = await fetch(`${this.baseURL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages,
+          temperature: 0.7,
+          max_tokens: 500
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.statusText}`);
+      }
+
+      const result: DeepSeekResponse = await response.json();
+      return result.choices[0]?.message?.content || 'Unable to generate insight';
+    } catch (error) {
+      console.error('DeepSeek API error:', error);
+      throw new Error('Failed to generate goal insight. Please check your connection and try again.');
+    }
+  }
 }
 
 export const deepseekApi = new DeepSeekAPI();

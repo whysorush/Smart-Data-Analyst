@@ -52,6 +52,7 @@ export const Goals: React.FC<GoalsProps> = ({ datasets }) => {
     target: '',
     deadline: ''
   });
+  const [loadingGoalSync, setLoadingGoalSync] = useState<string | null>(null);
 
   useEffect(() => {
     if (datasets.length > 0) {
@@ -188,6 +189,21 @@ export const Goals: React.FC<GoalsProps> = ({ datasets }) => {
     }).format(converted);
   };
 
+  // Sync a goal with AI to get a 1-3 sentence insight
+  const handleSyncGoalWithAI = async (goalId: string) => {
+    if (!selectedDataset) return;
+    setLoadingGoalSync(goalId);
+    try {
+      const goal = goals.find(g => g.id === goalId);
+      if (!goal) return;
+      const insight = await deepseekApi.generateGoalInsight(goal, selectedDataset);
+      setGoals(prevGoals => prevGoals.map(g => g.id === goalId ? { ...g, insight } : g));
+    } catch (error) {
+      setGoals(prevGoals => prevGoals.map(g => g.id === goalId ? { ...g, insight: 'Failed to generate insight. Please try again.' } : g));
+    }
+    setLoadingGoalSync(null);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -311,12 +327,28 @@ export const Goals: React.FC<GoalsProps> = ({ datasets }) => {
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
                     <h4 className="text-lg font-semibold text-gray-900 dark:text-white">{goal.title}</h4>
-                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(goal.status)}`}>
+                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(goal.status)}`}> 
                       {getStatusIcon(goal.status)}
                       {goal.status.replace('-', ' ')}
                     </span>
                   </div>
                   <p className="text-gray-600 dark:text-gray-400 mb-4">{goal.description}</p>
+                  {/* Sync with AI button and insight */}
+                  {!goal.insight && (
+                    <button
+                      onClick={() => handleSyncGoalWithAI(goal.id)}
+                      disabled={loadingGoalSync === goal.id}
+                      className="mb-3 flex items-center gap-2 px-3 py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm shadow"
+                    >
+                      {loadingGoalSync === goal.id ? <Loader className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}
+                      Sync with AI
+                    </button>
+                  )}
+                  {goal.insight && (
+                    <div className="mb-3 p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded text-emerald-900 dark:text-emerald-200 text-sm">
+                      <span className="font-semibold">AI Insight:</span> {goal.insight}
+                    </div>
+                  )}
                   
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
@@ -380,7 +412,32 @@ export const Goals: React.FC<GoalsProps> = ({ datasets }) => {
           </div>
         ) : recommendations ? (
           <div className="prose prose-sm max-w-none text-gray-700 dark:text-gray-300">
-            <p className="whitespace-pre-wrap">{recommendations}</p>
+            {/* Beautify AI Recommendations output */}
+            {(() => {
+              // Try to split into bullet points or numbered list
+              const lines = recommendations.split(/\n|\r/).filter(l => l.trim());
+              const isBulleted = lines.every(l => l.trim().match(/^[-*•]/));
+              const isNumbered = lines.every(l => l.trim().match(/^\d+\./));
+              if (isBulleted) {
+                return (
+                  <ul className="list-disc pl-5">
+                    {lines.map((l, i) => <li key={i}>{l.replace(/^[-*•]\s*/, '')}</li>)}
+                  </ul>
+                );
+              } else if (isNumbered) {
+                return (
+                  <ol className="list-decimal pl-5">
+                    {lines.map((l, i) => <li key={i}>{l.replace(/^\d+\.\s*/, '')}</li>)}
+                  </ol>
+                );
+              } else {
+                return (
+                  <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded">
+                    <span>{recommendations}</span>
+                  </div>
+                );
+              }
+            })()}
           </div>
         ) : (
           <p className="text-gray-500 dark:text-gray-400 text-center py-8">

@@ -28,6 +28,7 @@ export interface Goal {
   current: number;
   deadline: Date;
   status: 'on-track' | 'at-risk' | 'off-track';
+  insight?: string; // AI-generated insight for this goal
 }
 
 export interface Insight {
