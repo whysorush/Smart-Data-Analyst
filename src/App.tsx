@@ -11,6 +11,7 @@ import { useDeepSeekApiKey } from './hooks/useDeepSeekApiKey';
 function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [importedDataset, setImportedDataset] = useState<Dataset | null>(null);
   const { apiKey, setApiKey } = useDeepSeekApiKey();
 
   // Ensure API key is loaded from localStorage on mount
@@ -22,6 +23,7 @@ function App() {
   }, []);
 
   const handleDataImported = (dataset: Dataset) => {
+    setImportedDataset(dataset);
     setDatasets(prev => [...prev, dataset]);
     setCurrentView('dashboard');
   };
@@ -31,7 +33,16 @@ function App() {
       case 'dashboard':
         return <Dashboard datasets={datasets} />;
       case 'import':
-        return <DataImport onDataImported={handleDataImported} />;
+        return (
+          <>
+            <DataImport onDataImported={handleDataImported} />
+            {importedDataset && (
+              <button onClick={() => setCurrentView('dashboard')}>
+                Continue to Dashboard
+              </button>
+            )}
+          </>
+        );
       case 'analytics':
         return <Analytics datasets={datasets} />;
       case 'goals':

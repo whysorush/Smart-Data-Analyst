@@ -8,6 +8,7 @@ export interface Dataset {
   data: DataPoint[];
   columns: string[];
   uploadDate: Date;
+  columnMeta?: Record<string, { type: string; description: string }>;
 }
 
 export interface KPI {

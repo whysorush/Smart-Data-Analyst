@@ -30,8 +30,15 @@ class DeepSeekAPI {
   private baseURL = 'https://api.deepseek.com';
   private model = 'deepseek-chat';
 
-  async generateInsights(data: any[], context: string): Promise<string> {
+  async generateInsights(data: any[], context: string, columnMeta?: Record<string, { type: string; description: string }>): Promise<string> {
     try {
+      let columnContext = '';
+      if (columnMeta) {
+        columnContext = '\nColumn descriptions:\n' + Object.entries(columnMeta).map(([col, meta]) => {
+          const m = meta as { type: string; description: string };
+          return `${col} (${m.type}): ${m.description || 'No description'}`;
+        }).join('\n');
+      }
       const messages: DeepSeekMessage[] = [
         {
           role: 'system',
@@ -39,15 +46,7 @@ class DeepSeekAPI {
         },
         {
           role: 'user',
-          content: `Analyze this business data and provide insights:
-Context: ${context}
-
-Data sample (first 10 records):
-${JSON.stringify(data.slice(0, 10), null, 2)}
-
-Total records: ${data.length}
-
-If the dataset is large, summarize the main trends and highlight any notable outliers or patterns. Focus on what matters most for business decisions.`
+          content: `Analyze this business data and provide insights:\nContext: ${context}${columnContext}\n\nData sample (first 10 records):\n${JSON.stringify(data.slice(0, 10), null, 2)}\n\nTotal records: ${data.length}\nIf the dataset is large, summarize the main trends and highlight any notable outliers or patterns. Focus on what matters most for business decisions.`
         }
       ];
 
@@ -77,8 +76,15 @@ If the dataset is large, summarize the main trends and highlight any notable out
     }
   }
 
-  async generateKPIRecommendations(kpis: any[]): Promise<string> {
+  async generateKPIRecommendations(kpis: any[], columnMeta?: Record<string, { type: string; description: string }>): Promise<string> {
     try {
+      let columnContext = '';
+      if (columnMeta) {
+        columnContext = '\nColumn descriptions:\n' + Object.entries(columnMeta).map(([col, meta]) => {
+          const m = meta as { type: string; description: string };
+          return `${col} (${m.type}): ${m.description || 'No description'}`;
+        }).join('\n');
+      }
       const messages: DeepSeekMessage[] = [
         {
           role: 'system',
@@ -86,10 +92,7 @@ If the dataset is large, summarize the main trends and highlight any notable out
         },
         {
           role: 'user',
-          content: `Analyze these KPIs and provide recommendations:
-${JSON.stringify(kpis, null, 2)}
-
-If there are many KPIs, focus on the most important ones and summarize your recommendations for overall business impact.`
+          content: `Analyze these KPIs and provide recommendations:${columnContext}\n${JSON.stringify(kpis, null, 2)}\nIf there are many KPIs, focus on the most important ones and summarize your recommendations for overall business impact.`
         }
       ];
 
@@ -177,6 +180,13 @@ For large datasets, recommend a chart type that best summarizes the key relation
 
   async generateGoalInsight(goal: any, dataset: any): Promise<string> {
     try {
+      let columnContext = '';
+      if (dataset.columnMeta) {
+        columnContext = '\nColumn descriptions:\n' + Object.entries(dataset.columnMeta).map(([col, meta]) => {
+          const m = meta as { type: string; description: string };
+          return `${col} (${m.type}): ${m.description || 'No description'}`;
+        }).join('\n');
+      }
       const messages: DeepSeekMessage[] = [
         {
           role: 'system',
@@ -184,7 +194,7 @@ For large datasets, recommend a chart type that best summarizes the key relation
         },
         {
           role: 'user',
-          content: `Goal: ${goal.title}\nDescription: ${goal.description}\nTarget: ${goal.target}\nDeadline: ${goal.deadline}\n\nAnalyze the following data (first 10 records):\n${JSON.stringify(dataset.data.slice(0, 10), null, 2)}\n\nColumns: ${dataset.columns.join(', ')}\nTotal records: ${dataset.data.length}`
+          content: `Goal: ${goal.title}\nDescription: ${goal.description}\nTarget: ${goal.target}\nDeadline: ${goal.deadline}${columnContext}\n\nAnalyze the following data (first 10 records):\n${JSON.stringify(dataset.data.slice(0, 10), null, 2)}\n\nColumns: ${dataset.columns.join(', ')}\nTotal records: ${dataset.data.length}`
         }
       ];
 

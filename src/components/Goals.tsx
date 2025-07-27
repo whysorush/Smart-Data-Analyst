@@ -10,35 +10,8 @@ interface GoalsProps {
 
 export const Goals: React.FC<GoalsProps> = ({ datasets }) => {
   const { currency, rates } = useCurrency();
-  const [goals, setGoals] = useState<Goal[]>([
-    // {
-    //   id: '1',
-    //   title: 'Increase Monthly Revenue',
-    //   description: 'Achieve $300K in monthly recurring revenue',
-    //   target: 300000,
-    //   current: 0,
-    //   deadline: new Date('2024-03-31'),
-    //   status: 'off-track'
-    // },
-    // {
-    //   id: '2',
-    //   title: 'Expand User Base',
-    //   description: 'Reach 1,500 active monthly users',
-    //   target: 1500,
-    //   current: 0,
-    //   deadline: new Date('2024-04-15'),
-    //   status: 'off-track'
-    // },
-    // {
-    //   id: '3',
-    //   title: 'Improve Conversion Rate',
-    //   description: 'Achieve 4% conversion rate from visitors to customers',
-    //   target: 4.0,
-    //   current: 0,
-    //   deadline: new Date('2024-02-28'),
-    //   status: 'off-track'
-    // }
-  ]);
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [goalInput, setGoalInput] = useState('');
 
   const [kpis, setKpis] = useState<KPI[]>([]);
   const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null);
@@ -161,7 +134,8 @@ export const Goals: React.FC<GoalsProps> = ({ datasets }) => {
     setLoadingRecommendations(false);
   };
 
-  const handleAddGoal = () => {
+  const handleAddGoal = (e: React.FormEvent) => {
+    e.preventDefault();
     if (newGoal.title && newGoal.target && newGoal.deadline) {
       const goal: Goal = {
         id: Date.now().toString(),
@@ -172,7 +146,6 @@ export const Goals: React.FC<GoalsProps> = ({ datasets }) => {
         deadline: new Date(newGoal.deadline),
         status: 'on-track'
       };
-      
       setGoals(prev => [...prev, goal]);
       setNewGoal({ title: '', description: '', target: '', deadline: '' });
       setShowNewGoalForm(false);
@@ -386,7 +359,9 @@ export const Goals: React.FC<GoalsProps> = ({ datasets }) => {
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-gray-400" />
                         <p className="font-medium text-gray-900 dark:text-white">
-                          {goal.deadline.toLocaleDateString()}
+                          {goal.deadline instanceof Date
+                            ? goal.deadline.toLocaleDateString()
+                            : new Date(goal.deadline).toLocaleDateString()}
                         </p>
                       </div>
                     </div>

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Upload, FileText, CheckCircle, AlertTriangle, Download } from 'lucide-react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
@@ -14,6 +14,64 @@ export const DataImport: React.FC<DataImportProps> = ({ onDataImported }) => {
   const [errorMessage, setErrorMessage] = useState('');
   const [previewData, setPreviewData] = useState<DataPoint[]>([]);
   const [fileName, setFileName] = useState('');
+  const [columnMeta, setColumnMeta] = useState<Record<string, { type: string; description: string }>>({});
+  // Remove onDataImported from file processing, only call on button click
+  // Store the last processed dataset in a state
+  const [pendingDataset, setPendingDataset] = useState<Dataset | null>(null);
+
+  // Update columnMeta when previewData changes
+  useEffect(() => {
+    if (previewData.length > 0) {
+      const detected = detectColumnTypes(previewData);
+      const meta: Record<string, { type: string; description: string }> = {};
+      for (const key of Object.keys(previewData[0])) {
+        meta[key] = {
+          type: detected[key] || 'string',
+          description: ''
+        };
+      }
+      setColumnMeta(meta);
+    }
+  }, [previewData]);
+
+  const handleTypeChange = (col: string, type: string) => {
+    setColumnMeta(prev => ({ ...prev, [col]: { ...prev[col], type } }));
+  };
+  const handleDescChange = (col: string, desc: string) => {
+    setColumnMeta(prev => ({ ...prev, [col]: { ...prev[col], description: desc } }));
+  };
+
+const detectColumnTypes = (data: DataPoint[]) => {
+  if (data.length === 0) return {};
+  
+  const firstRow = data[0];
+  const columnTypes: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(firstRow)) {
+    if (value === null || value === undefined) {
+      columnTypes[key] = 'unknown';
+      continue;
+    }
+
+    const type = typeof value;
+    if (type === 'string') {
+      // Check if it's a date string
+      if (typeof value === 'string' && !isNaN(Date.parse(value))) {
+        columnTypes[key] = 'date';
+      } else {
+        columnTypes[key] = 'string';
+      }
+    } else if (type === 'number') {
+      columnTypes[key] = 'number';
+    } else if (type === 'boolean') {
+      columnTypes[key] = 'boolean';
+    } else {
+      columnTypes[key] = type;
+    }
+  }
+
+  return columnTypes;
+};
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -50,12 +108,13 @@ export const DataImport: React.FC<DataImportProps> = ({ onDataImported }) => {
             name: file.name.replace(/\.[^/.]+$/, ''),
             data,
             columns,
-            uploadDate: new Date()
+            uploadDate: new Date(),
+            columnMeta: columnMeta
           };
 
           setPreviewData(data.slice(0, 5));
           setUploadStatus('success');
-          onDataImported(dataset);
+          setPendingDataset(dataset);
         } catch (error) {
           setErrorMessage('Invalid JSON format');
           setUploadStatus('error');
@@ -85,12 +144,13 @@ export const DataImport: React.FC<DataImportProps> = ({ onDataImported }) => {
             name: file.name.replace(/\.[^/.]+$/, ''),
             data: json as DataPoint[],
             columns,
-            uploadDate: new Date()
+            uploadDate: new Date(),
+            columnMeta: columnMeta
           };
 
           setPreviewData((json as DataPoint[]).slice(0, 5));
           setUploadStatus('success');
-          onDataImported(dataset);
+          setPendingDataset(dataset);
         } catch (error) {
           setErrorMessage('Invalid Excel file format');
           setUploadStatus('error');
@@ -116,13 +176,13 @@ export const DataImport: React.FC<DataImportProps> = ({ onDataImported }) => {
             name: file.name.replace(/\.[^/.]+$/, ''),
             data,
             columns,
-            uploadDate: new Date()
+            uploadDate: new Date(),
+            columnMeta: columnMeta
           };
 
           setPreviewData(data.slice(0, 5));
           setUploadStatus('success');
-          console.log(dataset);
-          onDataImported(dataset);
+          setPendingDataset(dataset);
         },
         error: (error) => {
           setErrorMessage(error.message);
@@ -252,23 +312,86 @@ export const DataImport: React.FC<DataImportProps> = ({ onDataImported }) => {
       </div>
 
       {/* File Status */}
-      {fileName && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 bg-gradient-card shadow-lg">
+      {fileName && uploadStatus === 'success' && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 bg-gradient-card shadow-lg flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <FileText className="w-5 h-5 text-gray-400" />
             <div>
               <p className="font-medium text-gray-900 dark:text-white">{fileName}</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                {uploadStatus === 'success' ? 'Ready for analysis' : 
-                 uploadStatus === 'processing' ? 'Processing...' : 'Upload failed'}
-              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Ready for analysis</p>
             </div>
           </div>
+          <button
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            disabled={!pendingDataset || uploadStatus !== 'success'}
+            onClick={() => {
+              if (pendingDataset) {
+                onDataImported({ ...pendingDataset, columnMeta });
+                setPendingDataset(null);
+              }
+            }}
+          >
+            Import Data
+          </button>
         </div>
       )}
-
+{previewData.length > 0 && (
+  <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 bg-gradient-card shadow-lg">
+    <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Data Preview</h3>
+      <p className="text-sm text-gray-500 dark:text-gray-400">First 5 rows of your data</p>
+    </div>
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead className="bg-gray-50 dark:bg-gray-700">
+          <tr>
+            {Object.keys(previewData[0] || {}).map((key) => {
+              return (
+                <th key={key} className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <div className="flex flex-col gap-1">
+                    <span>{key}</span>
+                    <select
+                      className="mt-1 text-xs rounded border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      value={columnMeta[key]?.type || 'string'}
+                      onChange={e => handleTypeChange(key, e.target.value)}
+                    >
+                      <option value="string">String</option>
+                      <option value="number">Number</option>
+                      <option value="date">Date</option>
+                      <option value="boolean">Boolean</option>
+                      <option value="unknown">Unknown</option>
+                    </select>
+                    <input
+                      className="mt-1 text-xs rounded border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      type="text"
+                      placeholder="Description"
+                      value={columnMeta[key]?.description || ''}
+                      onChange={e => handleDescChange(key, e.target.value)}
+                      maxLength={60}
+                    />
+                  </div>
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
+          {previewData.map((row, index) => (
+            <tr key={index}>
+              {Object.values(row).map((value, i) => (
+                <td key={i} className="px-4 py-3 text-sm text-gray-900 dark:text-gray-300">
+                  {String(value)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+)}
       {/* Data Preview */}
-      {previewData.length > 0 && (
+      {/* {previewData.length > 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 bg-gradient-card shadow-lg">
           <div className="p-4 border-b border-gray-200 dark:border-gray-700">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Data Preview</h3>
@@ -299,7 +422,7 @@ export const DataImport: React.FC<DataImportProps> = ({ onDataImported }) => {
             </table>
           </div>
         </div>
-      )}
+      )} */}
     </div>
   );
 };

@@ -41,11 +41,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ datasets }) => {
       generateKPIsFromData(datasets[0]);
       prepareChartData(datasets[0]);
       // Set default X and Y columns
+      const allCols = datasets[0].columns;
       const numericCols = datasets[0].columns.filter(col => {
         const sampleValue = datasets[0].data[0]?.[col];
         return typeof sampleValue === 'number' || (!isNaN(Number(sampleValue)) && sampleValue !== '' && sampleValue !== null);
       });
-      setXAxisColumn(numericCols[0] || 'index');
+      setXAxisColumn(allCols[0] || 'index');
       setYAxisColumns(numericCols.slice(0, 2));
     }
   }, [datasets]);
@@ -53,11 +54,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ datasets }) => {
   // Update column selection when dataset changes
   useEffect(() => {
     if (selectedDataset) {
+      const allCols = selectedDataset.columns;
       const numericCols = selectedDataset.columns.filter(col => {
         const sampleValue = selectedDataset.data[0]?.[col];
         return typeof sampleValue === 'number' || (!isNaN(Number(sampleValue)) && sampleValue !== '' && sampleValue !== null);
       });
-      setXAxisColumn(numericCols[0] || 'index');
+      setXAxisColumn(allCols[0] || 'index');
       setYAxisColumns(numericCols.slice(0, 2));
     }
   }, [selectedDataset]);
@@ -381,22 +383,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ datasets }) => {
 
   // Aggregate chart data by date grouping if selected
   const getTimeGroupedData = () => {
-    if (dateGrouping === 'none' || !dateColumns.includes(xCol)) return filteredChartData;
-    // Group by day/week/month
-    const groupKeyFn = (row: any) => {
-      const date = new Date(row[xCol]);
-      if (dateGrouping === 'day') return date.toISOString().slice(0, 10);
-      if (dateGrouping === 'week') {
-        // Get ISO week string
-        const d = new Date(date.getTime());
-        d.setHours(0,0,0,0);
-        d.setDate(d.getDate() - d.getDay() + 1); // Monday as first day
-        const week = Math.ceil((((d.getTime() - new Date(d.getFullYear(),0,1).getTime())/86400000) + new Date(d.getFullYear(),0,1).getDay()+1)/7);
-        return `${d.getFullYear()}-W${week}`;
-      }
-      if (dateGrouping === 'month') return date.toISOString().slice(0, 7);
-      return row[xCol];
-    };
+    // Grouping key logic
+    const groupKeyFn = (dateGrouping !== 'none' && dateColumns.includes(xCol))
+      ? ((row: any) => {
+          const date = new Date(row[xCol]);
+          if (dateGrouping === 'day') return date.toISOString().slice(0, 10);
+          if (dateGrouping === 'week') {
+            const d = new Date(date.getTime());
+            d.setHours(0,0,0,0);
+            d.setDate(d.getDate() - d.getDay() + 1);
+            const week = Math.ceil((((d.getTime() - new Date(d.getFullYear(),0,1).getTime())/86400000) + new Date(d.getFullYear(),0,1).getDay()+1)/7);
+            return `${d.getFullYear()}-W${week}`;
+          }
+          if (dateGrouping === 'month') return date.toISOString().slice(0, 7);
+          return row[xCol];
+        })
+      : ((row: any) => row[xCol]);
+
     // Group rows
     const groups: {[key: string]: any[]} = {};
     filteredChartData.forEach(row => {
@@ -782,7 +785,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ datasets }) => {
                  className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs"
                >
                  <option value="index">index</option>
-                 {numericColumns.map(col => (
+                 {selectedDataset?.columns.map(col => (
                    <option key={col} value={col}>{col}</option>
                  ))}
                </select>
@@ -797,12 +800,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ datasets }) => {
                    setYAxisColumns(options.slice(0, 2));
                  }}
                  className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs min-w-[100px]"
-                 size={Math.min(4, numericColumns.length)}
-               >
-                 {numericColumns.map(col => (
-                   <option key={col} value={col}>{col}</option>
-                 ))}
-               </select>
+                 size={Math.min(4, (selectedDataset?.columns.filter(col => {
+                    const sampleValue = selectedDataset?.data[0]?.[col];
+                    return typeof sampleValue === 'number' || (!isNaN(Number(sampleValue)) && sampleValue !== '' && sampleValue !== null);
+                  }).length) || 0)}
+                >
+                  {selectedDataset?.columns.filter(col => {
+                    const sampleValue = selectedDataset?.data[0]?.[col];
+                    return typeof sampleValue === 'number' || (!isNaN(Number(sampleValue)) && sampleValue !== '' && sampleValue !== null);
+                  }).map(col => (
+                     <option key={col} value={col}>{col}</option>
+                   ))}
+                </select>
              </div>
              {/* Chart Type Dropdown */}
              <div>
