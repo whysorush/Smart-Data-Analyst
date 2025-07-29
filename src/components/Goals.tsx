@@ -3,6 +3,8 @@ import { Target, Plus, TrendingUp, Calendar, CheckCircle, AlertTriangle, Clock, 
 import type { Goal, KPI, Dataset } from '../types';
 import { deepseekApi } from '../services/deepseekApi';
 import { useCurrency } from '../hooks/useCurrency';
+import { beautifyAIResponse, getResponseContainerClass } from '../utils/aiResponseFormatter';
+import { AIResponseContainer } from './AIResponseContainer';
 
 interface GoalsProps {
   datasets: Dataset[];
@@ -126,7 +128,7 @@ export const Goals: React.FC<GoalsProps> = ({ datasets }) => {
   const generateRecommendations = async () => {
     setLoadingRecommendations(true);
     try {
-      const kpiRecommendations = await deepseekApi.generateKPIRecommendations(kpis);
+      const kpiRecommendations = await deepseekApi.generateKPIRecommendations(kpis, selectedDataset?.columnMeta);
       setRecommendations(kpiRecommendations);
     } catch (error) {
       setRecommendations('Failed to generate recommendations. Please try again.');
@@ -318,9 +320,15 @@ export const Goals: React.FC<GoalsProps> = ({ datasets }) => {
                     </button>
                   )}
                   {goal.insight && (
-                    <div className="mb-3 p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded text-emerald-900 dark:text-emerald-200 text-sm">
-                      <span className="font-semibold">AI Insight:</span> {goal.insight}
-                    </div>
+                    <AIResponseContainer content={goal.insight} title={`AI Insight - ${goal.title}`}>
+                      <div className={`mb-3 p-3 border rounded text-sm ${getResponseContainerClass(goal.insight)}`}>
+                        <span className="font-semibold text-emerald-900 dark:text-emerald-200">AI Insight:</span>
+                        <div 
+                          className="mt-1 text-emerald-900 dark:text-emerald-200"
+                          dangerouslySetInnerHTML={{ __html: beautifyAIResponse(goal.insight) }}
+                        />
+                      </div>
+                    </AIResponseContainer>
                   )}
                   
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -386,34 +394,12 @@ export const Goals: React.FC<GoalsProps> = ({ datasets }) => {
             <span className="ml-2 text-gray-600 dark:text-gray-400">Generating recommendations...</span>
           </div>
         ) : recommendations ? (
-          <div className="prose prose-sm max-w-none text-gray-700 dark:text-gray-300">
-            {/* Beautify AI Recommendations output */}
-            {(() => {
-              // Try to split into bullet points or numbered list
-              const lines = recommendations.split(/\n|\r/).filter(l => l.trim());
-              const isBulleted = lines.every(l => l.trim().match(/^[-*•]/));
-              const isNumbered = lines.every(l => l.trim().match(/^\d+\./));
-              if (isBulleted) {
-                return (
-                  <ul className="list-disc pl-5">
-                    {lines.map((l, i) => <li key={i}>{l.replace(/^[-*•]\s*/, '')}</li>)}
-                  </ul>
-                );
-              } else if (isNumbered) {
-                return (
-                  <ol className="list-decimal pl-5">
-                    {lines.map((l, i) => <li key={i}>{l.replace(/^\d+\.\s*/, '')}</li>)}
-                  </ol>
-                );
-              } else {
-                return (
-                  <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded">
-                    <span>{recommendations}</span>
-                  </div>
-                );
-              }
-            })()}
-          </div>
+          <AIResponseContainer content={recommendations} title="AI Recommendations">
+            <div 
+              className={`prose prose-sm max-w-none text-gray-700 dark:text-gray-300 ${getResponseContainerClass(recommendations)}`}
+              dangerouslySetInnerHTML={{ __html: beautifyAIResponse(recommendations) }}
+            />
+          </AIResponseContainer>
         ) : (
           <p className="text-gray-500 dark:text-gray-400 text-center py-8">
             Click "Get AI Recommendations" to receive strategic insights for improving your KPIs

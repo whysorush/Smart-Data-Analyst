@@ -4,6 +4,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import type { Dataset, KPI } from '../types';
 import { deepseekApi } from '../services/deepseekApi';
 import { useCurrency } from '../hooks/useCurrency';
+import { beautifyAIResponse, getResponseContainerClass } from '../utils/aiResponseFormatter';
+import { AIResponseContainer } from './AIResponseContainer';
 
 interface DashboardProps {
   datasets: Dataset[];
@@ -68,12 +70,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ datasets }) => {
   const prepareChartData = (dataset: Dataset) => {
     if (!dataset || dataset.data.length === 0) return;
 
-    // 1. Convert all rows to numeric as before
+    // 1. Convert rows based on column metadata
     const processedData = dataset.data.map((row, index) => {
       const processedRow: any = { index: index + 1 };
       dataset.columns.forEach(column => {
         const value = row[column];
-        processedRow[column] = !isNaN(Number(value)) && value !== '' && value !== null ? Number(value) : value;
+        const columnType = dataset.columnMeta?.[column]?.type || 'string';
+        
+        // Convert based on column type
+        if (columnType === 'number') {
+          processedRow[column] = !isNaN(Number(value)) && value !== '' && value !== null ? Number(value) : 0;
+        } else if (columnType === 'date') {
+          processedRow[column] = value; // Keep as string for date columns
+        } else if (columnType === 'boolean') {
+          processedRow[column] = Boolean(value);
+        } else {
+          processedRow[column] = value; // Keep as string for other types
+        }
       });
       return processedRow;
     });
@@ -104,10 +117,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ datasets }) => {
   const generateKPIsFromData = (dataset: Dataset) => {
     if (!dataset || dataset.data.length === 0) return;
 
+    // Use column metadata to identify numeric columns
     const numericColumns = dataset.columns.filter(col => {
-      const sampleValues = dataset.data.slice(0, 10).map(row => row[col]);
-      const numericValues = sampleValues.filter(val => !isNaN(Number(val)) && val !== '' && val !== null);
-      return numericValues.length > sampleValues.length * 0.7; // At least 70% numeric
+      const columnType = dataset.columnMeta?.[col]?.type || 'string';
+      return columnType === 'number';
     });
 
     const generatedKPIs: KPI[] = numericColumns.slice(0, 4).map((column, index) => {
@@ -206,7 +219,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ datasets }) => {
         5. Actionable next steps
       `;
 
-      const aiInsights = await deepseekApi.generateInsights(selectedDataset.data, context);
+      const aiInsights = await deepseekApi.generateInsights(selectedDataset.data, context, selectedDataset.columnMeta);
       setInsights(aiInsights);
     } catch (error) {
       setInsights('Failed to generate insights. Please check your connection and try again.');
@@ -229,47 +242,77 @@ export const Dashboard: React.FC<DashboardProps> = ({ datasets }) => {
     setLoadingChat(true);
 
     try {
-      // Enhanced context for chat queries
-      const relevantData = selectedDataset.data.slice(0, 10);
+      // Get only essential data for the specific question
+      const question = chatInput.toLowerCase();
+      
+      // Determine what data is relevant based on the question
+      let relevantColumns = selectedDataset.columns;
+      let sampleData = selectedDataset.data.slice(0, 5); // Reduced sample size
+      
+      // Filter columns based on question keywords
+      if (question.includes('revenue') || question.includes('sales') || question.includes('price') || question.includes('cost')) {
+        relevantColumns = selectedDataset.columns.filter(col => 
+          col.toLowerCase().includes('revenue') || 
+          col.toLowerCase().includes('sales') || 
+          col.toLowerCase().includes('price') || 
+          col.toLowerCase().includes('cost') ||
+          col.toLowerCase().includes('amount') ||
+          col.toLowerCase().includes('value')
+        );
+      } else if (question.includes('product') || question.includes('category') || question.includes('item')) {
+        relevantColumns = selectedDataset.columns.filter(col => 
+          col.toLowerCase().includes('product') || 
+          col.toLowerCase().includes('category') || 
+          col.toLowerCase().includes('item') ||
+          col.toLowerCase().includes('name') ||
+          col.toLowerCase().includes('type')
+        );
+      } else if (question.includes('date') || question.includes('time') || question.includes('period')) {
+        relevantColumns = selectedDataset.columns.filter(col => 
+          col.toLowerCase().includes('date') || 
+          col.toLowerCase().includes('time') || 
+          col.toLowerCase().includes('period') ||
+          col.toLowerCase().includes('month') ||
+          col.toLowerCase().includes('year')
+        );
+      }
 
-      // Calculate basic stats for numeric columns
-      const numericColumns = selectedDataset.columns.filter(col => {
+      // Calculate only relevant stats
+      const numericColumns = relevantColumns.filter(col => {
         const sampleValue = selectedDataset.data[0]?.[col];
         return !isNaN(Number(sampleValue)) && sampleValue !== '';
       });
-      const dataStats = numericColumns.map(col => {
-        const values = selectedDataset.data.map(row => Number(row[col])).filter(val => !isNaN(val));
-        const sum = values.reduce((a, b) => a + b, 0);
-        const avg = sum / values.length;
-        const max = Math.max(...values);
-        const min = Math.min(...values);
-        return `${col}: Avg=${avg.toFixed(2)}, Total=${sum.toFixed(2)}, Max=${max}, Min=${min}, Count=${values.length}`;
-      }).join('\n');
+
+      let dataStats = '';
+      if (numericColumns.length > 0) {
+        const stats = numericColumns.map(col => {
+          const values = selectedDataset.data.map(row => Number(row[col])).filter(val => !isNaN(val));
+          if (values.length === 0) return null;
+          const sum = values.reduce((a, b) => a + b, 0);
+          const avg = sum / values.length;
+          return `${col}: ${avg.toFixed(2)} (avg), ${sum.toFixed(2)} (total)`;
+        }).filter(Boolean);
+        dataStats = stats.join('\n');
+      }
 
       const context = `
-        User Question: "${chatInput}"
+        Question: "${chatInput}"
 
-        Dataset Context:
-        - Name: ${selectedDataset.name}
-        - Total Records: ${selectedDataset.data.length}
-        - Columns: ${selectedDataset.columns.join(', ')}
+        Dataset: ${selectedDataset.name} (${selectedDataset.data.length} records)
+        Relevant Columns: ${relevantColumns.join(', ')}
 
-        All monetary values are in INR (Indian Rupees).
+        ${dataStats ? `Key Metrics:\n${dataStats}` : ''}
 
-        Sample Data (first 10 records):
-        ${JSON.stringify(relevantData, null, 2)}
-
-        Statistical Summary:
-        ${dataStats}
-
-        Current KPIs:
-        ${kpis.map(kpi => `${kpi.name}: ${kpi.value} (${kpi.trend} ${kpi.changePercent}%)`).join('\n')}
-
-        Please provide a specific, data-driven answer to the user's question based on this dataset.
-        and only if user asks then provide the answer (For large datasets, focus on summarizing key trends, patterns, and anomalies. Highlight actionable insights, outliers, and business implications.) Use concise bullet points and suggest further analysis or visualizations if relevant.
+        Instructions:
+        - Provide a direct, concise answer to the specific question
+        - Use 2-3 bullet points maximum
+        - Focus only on data relevant to the question
+        - Be formal and professional
+        - Include specific numbers when available
+        - Keep response under 100 words
       `;
       
-      const aiResponse = await deepseekApi.generateInsights(selectedDataset.data, context);
+      const aiResponse = await deepseekApi.generateInsights(selectedDataset.data, context, selectedDataset.columnMeta);
       
       const aiMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -325,11 +368,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ datasets }) => {
     }).format(converted);
   };
 
-  // Get numeric columns for charts
+  // Get numeric columns for charts using column metadata
   const numericColumns = selectedDataset?.columns.filter(col => {
-    if (!chartData.length) return false;
-    const sampleValue = chartData[0]?.[col];
-    return typeof sampleValue === 'number' && !isNaN(sampleValue);
+    const columnType = selectedDataset.columnMeta?.[col]?.type || 'string';
+    return columnType === 'number';
   }) || [];
 
   const COLORS = ['#00C9FF', '#92FE9D', '#3B82F6', '#10B981', '#F59E0B', '#EF4444'];
@@ -377,7 +419,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ datasets }) => {
   }) || [];
   const [dateGrouping, setDateGrouping] = useState<'none' | 'day' | 'week' | 'month'>('none');
   // --- Aggregation Method ---
-  const [aggregationMethod, setAggregationMethod] = useState<'average' | 'sum' | 'min' | 'max' | 'median'>('average');
+  const [aggregationMethod, setAggregationMethod] = useState<'none' | 'average' | 'sum' | 'min' | 'max' | 'median'>('average');
   // --- Brush (Zoom & Pan) ---
   const [brushRange, setBrushRange] = useState<{ startIndex: number, endIndex: number } | null>(null);
 
@@ -409,6 +451,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ datasets }) => {
     });
     // Aggregate each group using selected method
     const aggregate = (arr: number[]) => {
+      if (aggregationMethod === 'none') return arr; // Return array for no aggregation
       if (aggregationMethod === 'sum') return arr.reduce((a, b) => a + b, 0);
       if (aggregationMethod === 'min') return Math.min(...arr);
       if (aggregationMethod === 'max') return Math.max(...arr);
@@ -420,11 +463,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ datasets }) => {
       // average
       return arr.reduce((a, b) => a + b, 0) / arr.length;
     };
+    
+    if (aggregationMethod === 'none') {
+      // Return raw data without grouping/aggregation
+      return filteredChartData.map((row, idx) => ({
+        ...row,
+        index: idx + 1
+      }));
+    }
+    
     return Object.entries(groups).map(([key, rows], idx) => {
       const agg: any = { [xCol]: key, index: idx + 1 };
       yCols.forEach(col => {
         const vals = rows.map(r => (typeof r[col] === 'number' ? r[col] : 0));
-        agg[col] = aggregate(vals);
+        const result = aggregate(vals);
+        agg[col] = Array.isArray(result) ? result[0] : result; // Handle array case
       });
       return agg;
     });
@@ -852,6 +905,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ datasets }) => {
                  onChange={e => setAggregationMethod(e.target.value as any)}
                  className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs"
                >
+                 <option value="none">None</option>
                  <option value="average">Average</option>
                  <option value="sum">Sum</option>
                  <option value="min">Min</option>
@@ -886,9 +940,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ datasets }) => {
                       <span className="ml-2 text-gray-600 dark:text-gray-400">Generating insights...</span>
                     </div>
                   ) : insights ? (
-                    <div className="prose prose-sm max-w-none text-gray-700 dark:text-gray-300">
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed">{insights}</p>
-                    </div>
+                    <AIResponseContainer content={insights} title="AI Insights">
+                      <div 
+                        className={`prose prose-sm max-w-none text-gray-700 dark:text-gray-300 ${getResponseContainerClass(insights)}`}
+                        dangerouslySetInnerHTML={{ __html: beautifyAIResponse(insights) }}
+                      />
+                    </AIResponseContainer>
                   ) : (
                     <p className="text-gray-500 dark:text-gray-400 text-center py-8 text-sm">
                       Click "Generate AI Insights" to analyze your data with DeepSeek AI
@@ -918,7 +975,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ datasets }) => {
                             ? 'bg-gradient-primary text-white' 
                             : 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-500'
                         }`}>
-                          <p className="whitespace-pre-wrap">{message.content}</p>
+                          {message.type === 'user' ? (
+                            <p className="whitespace-pre-wrap">{message.content}</p>
+                          ) : (
+                            <AIResponseContainer content={message.content} title="AI Chat Response">
+                              <div 
+                                className="whitespace-pre-wrap"
+                                dangerouslySetInnerHTML={{ __html: beautifyAIResponse(message.content) }}
+                              />
+                            </AIResponseContainer>
+                          )}
                           <p className="text-xs opacity-70 mt-1">
                             {message.timestamp.toLocaleTimeString()}
                           </p>
